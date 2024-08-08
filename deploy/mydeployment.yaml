@@ -1,20 +1,30 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  creationTimestamp: "2020-12-18T00:00:05Z"
+  labels:
+    amazon-ecr-repository-compliance-webhook: enabled
+  name: testing-the-gods-admission
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: test
-  namespace: test-namespace
+  name: deployment-2048
+  namespace: testing-the-gods-admission
 spec:
+  replicas: 1
   selector:
     matchLabels:
-      app: test
-  replicas: 2
+      app.kubernetes.io/name: app-2048
   template:
     metadata:
       labels:
-        app: test
+        app.kubernetes.io/name: app-2048
     spec:
       containers:
-      - name: test
-        image: nginx:latest # Also test with ECR images you own: example aws_account_id.dkr.ecr.region.amazonaws.com/image-name:latest
+      - image: 168134825737.dkr.ecr.us-west-2.amazonaws.com/docker-2048:latest #alexwhen/docker-2048
+        imagePullPolicy: Always
+        name: app-2048
         ports:
         - containerPort: 80
+          protocol: TCP

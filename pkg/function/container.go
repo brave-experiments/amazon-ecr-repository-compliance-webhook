@@ -8,11 +8,11 @@ import (
 	"context"
 	"errors"
 
-	"github.com/aws-samples/amazon-ecr-repository-compliance-webhook/pkg/webhook"
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go/service/ecr/ecriface"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	"github.com/brave-intl/amazon-ecr-repository-compliance-webhook/pkg/webhook"
 	log "github.com/sirupsen/logrus"
-	"k8s.io/api/admission/v1beta1"
+	v1 "k8s.io/api/admission/v1"
 )
 
 // Errors returned when a validation expectation fails.
@@ -23,13 +23,13 @@ var (
 
 // Container contains the dependencies and business logic for the amazon-ecr-repository-compliance-webhook Lambda function.
 type Container struct {
-	ECR ecriface.ECRAPI
+	ECR ecr.Client
 }
 
 // NewContainer creates a new function Container.
-func NewContainer(ecrSvc ecriface.ECRAPI) *Container {
+func NewContainer(ecrClient ecr.Client) *Container {
 	return &Container{
-		ECR: ecrSvc,
+		ECR: ecrClient,
 	}
 }
 
@@ -43,11 +43,12 @@ const code = 406 // NotAcceptable
 // 4. Using the Pod, check if the requested creation namespace is a critical one (e.g. kube-system).
 // 5. Using the Pod, extract all of the unique container images that are in the specification
 //   - If no images in the specification come from ECR, deny the admission immediately
+//
 // 6. For every image provided, check our 4 requirements
 // 7. If a single image didn't meet our requirements, deny the admission
 // 8. All requirements satisfied, allow the Pod for admission
 func (c *Container) Handler() Handler {
-	return func(ctx context.Context, event events.APIGatewayProxyRequest) (*v1beta1.AdmissionReview, error) {
+	return func(ctx context.Context, event events.APIGatewayProxyRequest) (*v1.AdmissionReview, error) {
 		request, err := webhook.NewRequestFromEvent(event) // 1
 		if err != nil {
 			log.Errorf("Error creating request from event: %v", err)

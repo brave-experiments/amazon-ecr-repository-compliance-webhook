@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aws-samples/amazon-ecr-repository-compliance-webhook/testdata"
+	"github.com/brave-intl/amazon-ecr-repository-compliance-webhook/testdata"
 	corev1 "k8s.io/api/core/v1"
 )
 

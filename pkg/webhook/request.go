@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
-	v1beta1 "k8s.io/api/admission/v1beta1"
+	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,19 +49,19 @@ var (
 // Request encapsulates the AdmissionRequest from the
 // AdmissionReview proxied to the Lambda function.
 type Request struct {
-	Admission *v1beta1.AdmissionRequest
+	Admission *v1.AdmissionRequest
 }
 
 // NewRequestFromEvent creates a Request from the APIGatewayProxyRequest.
 func NewRequestFromEvent(event events.APIGatewayProxyRequest) (*Request, error) {
-	val, ok := event.Headers["content-type"]
+	val, ok := event.Headers["Content-Type"]
 	if !ok {
 		return nil, ErrMissingContentType
 	}
 	if val != "application/json" {
 		return nil, ErrInvalidContentType
 	}
-	var review v1beta1.AdmissionReview
+	var review v1.AdmissionReview
 	if _, _, err := deserializer.Decode([]byte(event.Body), nil, &review); err != nil {
 		return nil, err
 	}

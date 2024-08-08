@@ -18,15 +18,17 @@ Metadata:
     SourceCodeUrl: https://github.com/aws-samples/amazon-ecr-repository-compliance-webhook
 
 Parameters:
+  ApiGwVpcEndpointId:
+    Type: String
+    Description: API Gateway VPC Endpoint ID
   RegistryRegion:
     Type: String
     Description: Optional. What AWS region should this Lambda function interact with ECR in?
     Default: ""
-  LogLevel:
+  RegistryId:
     Type: String
-    Description: Optional. The log level to set. DEBUG, INFO, WARN, or ERROR. Default's to INFO.
-    AllowedValues: ["DEBUG", "INFO", "WARN", "ERROR"]
-    Default: INFO
+    Description: Optional. What AWS account should this Lambda function interact with ECR in?
+    Default: ""
 
 Conditions:
   HasRegistryRegion: !Not [!Equals [!Ref RegistryRegion, ""]]
@@ -51,40 +53,57 @@ Resources:
             Statement:
               - Action:
                   - ecr:DescribeRepositories
-                  - xray:PutTraceSegments
                   - ecr:DescribeImageScanFindings
+                  - inspector2:ListCoverageStatistics
+                  - inspector2:ListFindings
+                  - inspector2:ListFindingAggregations
+                  - inspector2:ListCoverage
+                  - inspector2:GetFindingsReportStatus
+                  - inspector:ListFindings
+                  - inspector:DescribeFinding
                 Effect: Allow
                 Resource: "*"
             Version: "2012-10-17"
           PolicyName: ECRRepositoryComplianceWebhookLambdaPolicy
 
-  ECRRepositoryComplianceWebhookAPIGateway:
-    Type: AWS::Serverless::HttpApi
+  ECRRepositoryComplianceWebhookRestApi:
+    Type: AWS::Serverless::Api
     Properties:
       StageName: Prod
+      Auth:
+        ResourcePolicy:
+          IntrinsicVpceWhitelist:
+          - !Ref ApiGwVpcEndpointId
+      EndpointConfiguration:
+        Type: PRIVATE
+        VPCEndpointIds:
+        - !Ref ApiGwVpcEndpointId
 
   ECRRepositoryComplianceWebhookFunction:
     Type: AWS::Serverless::Function
     Description: Lambda handler for amazon-ecr-repository-compliance-webhook
+    Metadata:
+      BuildMethod: go1.x
     Properties:
       FunctionName: amazon-ecr-repository-compliance-webhook
-      Handler: main
-      Runtime: go1.x
-      Tracing: Active
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+      - arm64
       MemorySize: 128
       Role: !GetAtt ECRRepositoryComplianceWebhookExecutionRole.Arn
       Timeout: 15
       Environment:
         Variables:
           REGISTRY_REGION: !If [HasRegistryRegion, !Ref RegistryRegion, !Ref "AWS::NoValue"]
-          LOG_LEVEL: !Ref LogLevel
+          REGISTRY_ID: !Ref RegistryId
       Events:
         ValidationEvent:
-          Type: HttpApi
+          Type: Api
           Properties:
             Path: /check-image-compliance
             Method: post
-            ApiId: !Ref ECRRepositoryComplianceWebhookAPIGateway
+            RestApiId: !Ref ECRRepositoryComplianceWebhookRestApi
 
   ConfigAPIGatewayLambdaInvoke:
     Type: AWS::Lambda::Permission
@@ -96,4 +115,4 @@ Resources:
 Outputs:
   WebhookURL:
     Description: "ValidatingWebhookConfiguration invocation URL"
-    Value: !Sub "https://${ECRRepositoryComplianceWebhookAPIGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/check-image-compliance"
+    Value: !Sub "https://${ECRRepositoryComplianceWebhookRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/check-image-compliance"

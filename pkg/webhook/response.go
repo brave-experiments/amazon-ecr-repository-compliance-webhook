@@ -6,7 +6,7 @@ package webhook
 import (
 	"errors"
 
-	v1beta1 "k8s.io/api/admission/v1beta1"
+	v1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -17,8 +17,8 @@ var (
 )
 
 // BadRequestResponse is the response returned to the cluster when a bad request is sent.
-func BadRequestResponse(err error) (*v1beta1.AdmissionReview, error) {
-	response := &v1beta1.AdmissionResponse{
+func BadRequestResponse(err error) (*v1.AdmissionReview, error) {
+	response := &v1.AdmissionResponse{
 		Allowed: false,
 		Result: &metav1.Status{
 			Status:  metav1.StatusFailure,
@@ -32,7 +32,7 @@ func BadRequestResponse(err error) (*v1beta1.AdmissionReview, error) {
 
 // Response encapsulates the AdmissionResponse sent to API Gateway.
 type Response struct {
-	Admission *v1beta1.AdmissionResponse
+	Admission *v1.AdmissionResponse
 }
 
 // NewResponseFromRequest creates a Response from a Request.
@@ -44,7 +44,7 @@ func NewResponseFromRequest(r *Request) (*Response, error) {
 		return nil, ErrBadRequest
 	}
 	return &Response{
-		Admission: &v1beta1.AdmissionResponse{
+		Admission: &v1.AdmissionResponse{
 			UID: r.Admission.UID,
 		},
 	}, nil
@@ -52,7 +52,7 @@ func NewResponseFromRequest(r *Request) (*Response, error) {
 
 // FailValidation populates the AdmissionResponse with the failure contents
 // (message and error) and returns the AdmissionReview JSON body response for API Gateway.
-func (r *Response) FailValidation(code int32, failure error) (*v1beta1.AdmissionReview, error) {
+func (r *Response) FailValidation(code int32, failure error) (*v1.AdmissionReview, error) {
 	if failure == nil {
 		return nil, ErrMissingFailure
 	}
@@ -70,7 +70,7 @@ func (r *Response) FailValidation(code int32, failure error) (*v1beta1.Admission
 
 // PassValidation populates the AdmissionResponse with the pass contents
 // (message) and returns the AdmissionReview JSON response for API Gateway.
-func (r *Response) PassValidation() *v1beta1.AdmissionReview {
+func (r *Response) PassValidation() *v1.AdmissionReview {
 	r.Admission.Allowed = true
 	r.Admission.Result = &metav1.Status{
 		Status:  metav1.StatusSuccess,
@@ -80,11 +80,11 @@ func (r *Response) PassValidation() *v1beta1.AdmissionReview {
 	return respond(r.Admission)
 }
 
-func respond(admission *v1beta1.AdmissionResponse) *v1beta1.AdmissionReview {
-	return &v1beta1.AdmissionReview{
+func respond(admission *v1.AdmissionResponse) *v1.AdmissionReview {
+	return &v1.AdmissionReview{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AdmissionReview",
-			APIVersion: "admission.k8s.io/v1beta1",
+			APIVersion: "admission.k8s.io/v1",
 		},
 		Response: admission,
 	}

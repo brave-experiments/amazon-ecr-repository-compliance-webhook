@@ -6,15 +6,19 @@ package function
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	"github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecr"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
 const digestID = "@"
+
+var registryId = os.Getenv("REGISTRY_ID")
 
 // From repository:tag to repository, tag
 // Or repository@sha256:digest to repository, @sha256:digest
@@ -39,23 +43,23 @@ func parts(image string) (repo, tagOrDigest string) {
 func (c *Container) CheckRepositoryCompliance(ctx context.Context, image string) (bool, error) {
 	repo, _ := parts(image)
 	input := &ecr.DescribeRepositoriesInput{
-		RepositoryNames: []*string{aws.String(repo)},
+		RepositoryNames: []string{repo},
+		RegistryId:      &registryId,
 	}
-	if err := input.Validate(); err != nil {
-		return false, err
-	}
-	output, err := c.ECR.DescribeRepositoriesWithContext(ctx, input)
+
+	output, err := c.ECR.DescribeRepositories(ctx, input)
 	if err != nil {
 		return false, err
 	}
+
 	if len(output.Repositories) == 0 {
 		return false, fmt.Errorf("no repositories named '%s' found", repo)
 	}
 	r := output.Repositories[0]
-	if aws.StringValue(r.ImageTagMutability) == ecr.ImageTagMutabilityMutable {
+	if r.ImageTagMutability == types.ImageTagMutabilityMutable {
 		return false, fmt.Errorf("repository '%s' does not have image tag immutability enabled", repo)
 	}
-	if !aws.BoolValue(r.ImageScanningConfiguration.ScanOnPush) {
+	if !r.ImageScanningConfiguration.ScanOnPush {
 		return false, fmt.Errorf("repository '%s' does not have image scan on push enabled", repo)
 	}
 	critical, err := c.HasCriticalVulnerabilities(ctx, image)
@@ -63,7 +67,7 @@ func (c *Container) CheckRepositoryCompliance(ctx context.Context, image string)
 		return false, err
 	}
 	if critical {
-		return false, fmt.Errorf("image '%s' contains %s vulnerabilities", image, ecr.FindingSeverityCritical)
+		return false, fmt.Errorf("image '%s' contains %s vulnerabilities", image, types.FindingSeverityCritical)
 	}
 	return true, nil
 }
@@ -101,8 +105,9 @@ func (c *Container) HasCriticalVulnerabilities(ctx context.Context, image string
 		found             = false
 	)
 	input := &ecr.DescribeImageScanFindingsInput{
-		ImageId:        &ecr.ImageIdentifier{},
+		ImageId:        &types.ImageIdentifier{},
 		RepositoryName: aws.String(repo),
+		RegistryId:     &registryId,
 	}
 
 	switch strings.Contains(tagOrDigest, digestID) {
@@ -111,22 +116,18 @@ func (c *Container) HasCriticalVulnerabilities(ctx context.Context, image string
 	default:
 		input.ImageId.ImageTag = aws.String(tagOrDigest)
 	}
-	if err := input.Validate(); err != nil {
-		return true, err
+
+	output, err := c.ECR.DescribeImageScanFindings(ctx, input)
+	if err != nil {
+		return false, err
 	}
 
-	pager := func(out *ecr.DescribeImageScanFindingsOutput, lastPage bool) bool {
-		for _, finding := range out.ImageScanFindings.Findings {
-			if aws.StringValue(finding.Severity) == ecr.FindingSeverityCritical {
-				found = true
-				return found // break out of paging if we've already found a critical vuln.
-			}
+	for _, finding := range output.ImageScanFindings.Findings {
+		if finding.Severity == types.FindingSeverityCritical {
+			found = true
+			return found, nil
 		}
-		return lastPage
 	}
 
-	if err := c.ECR.DescribeImageScanFindingsPagesWithContext(ctx, input, pager); err != nil {
-		return true, err
-	}
 	return found, nil
 }
