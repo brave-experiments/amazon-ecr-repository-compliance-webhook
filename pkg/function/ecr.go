@@ -6,7 +6,6 @@ package function
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
@@ -17,8 +16,6 @@ import (
 )
 
 const digestID = "@"
-
-var registryId = os.Getenv("REGISTRY_ID")
 
 // From repository:tag to repository, tag
 // Or repository@sha256:digest to repository, @sha256:digest
@@ -44,7 +41,6 @@ func (c *Container) CheckRepositoryCompliance(ctx context.Context, image string)
 	repo, _ := parts(image)
 	input := &ecr.DescribeRepositoriesInput{
 		RepositoryNames: []string{repo},
-		RegistryId:      &registryId,
 	}
 
 	output, err := c.ECR.DescribeRepositories(ctx, input)
@@ -107,7 +103,6 @@ func (c *Container) HasCriticalVulnerabilities(ctx context.Context, image string
 	input := &ecr.DescribeImageScanFindingsInput{
 		ImageId:        &types.ImageIdentifier{},
 		RepositoryName: aws.String(repo),
-		RegistryId:     &registryId,
 	}
 
 	switch strings.Contains(tagOrDigest, digestID) {

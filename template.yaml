@@ -8,64 +8,18 @@ Metadata:
   AWS::ServerlessRepo::Application:
     Name: amazon-ecr-repository-compliance-webhook
     Description: "A Kubernetes ValidatingWebhookConfiguration and serverless backend: Deny Pods with container images that don't meet your compliance requirements"
-    Author: Simon Woldemichael
-    SpdxLicenseId: Apache-2.0
-    LicenseUrl: LICENSE
-    ReadmeUrl: README.md
-    Labels: ["kubernetes", "validating", "admission", "webhook", "eks", "ecr"]
-    HomePageUrl: https://github.com/aws-samples/amazon-ecr-repository-compliance-webhook
-    SemanticVersion: 1.5.0
-    SourceCodeUrl: https://github.com/aws-samples/amazon-ecr-repository-compliance-webhook
 
 Parameters:
-  ApiGwVpcEndpointId:
-    Type: String
+  ExecutionRole:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: IAM Role ARN
+    Default: /ECRCompliance/starfleet/SAM/ExecutionRoleArn
+  ApiGatewayVpcEndpointId:
+    Type: AWS::SSM::Parameter::Value<String>
     Description: API Gateway VPC Endpoint ID
-  RegistryRegion:
-    Type: String
-    Description: Optional. What AWS region should this Lambda function interact with ECR in?
-    Default: ""
-  RegistryId:
-    Type: String
-    Description: Optional. What AWS account should this Lambda function interact with ECR in?
-    Default: ""
-
-Conditions:
-  HasRegistryRegion: !Not [!Equals [!Ref RegistryRegion, ""]]
+    Default: /ECRCompliance/starfleet/SAM/ApiGwVpcEndpointId
 
 Resources:
-  ECRRepositoryComplianceWebhookExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Action:
-              - sts:AssumeRole
-            Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-        Version: "2012-10-17"
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyDocument:
-            Statement:
-              - Action:
-                  - ecr:DescribeRepositories
-                  - ecr:DescribeImageScanFindings
-                  - inspector2:ListCoverageStatistics
-                  - inspector2:ListFindings
-                  - inspector2:ListFindingAggregations
-                  - inspector2:ListCoverage
-                  - inspector2:GetFindingsReportStatus
-                  - inspector:ListFindings
-                  - inspector:DescribeFinding
-                Effect: Allow
-                Resource: "*"
-            Version: "2012-10-17"
-          PolicyName: ECRRepositoryComplianceWebhookLambdaPolicy
-
   ECRRepositoryComplianceWebhookRestApi:
     Type: AWS::Serverless::Api
     Properties:
@@ -73,11 +27,11 @@ Resources:
       Auth:
         ResourcePolicy:
           IntrinsicVpceWhitelist:
-          - !Ref ApiGwVpcEndpointId
+          - !Ref ApiGatewayVpcEndpointId
       EndpointConfiguration:
         Type: PRIVATE
         VPCEndpointIds:
-        - !Ref ApiGwVpcEndpointId
+        - !Ref ApiGatewayVpcEndpointId
 
   ECRRepositoryComplianceWebhookFunction:
     Type: AWS::Serverless::Function
@@ -91,12 +45,8 @@ Resources:
       Architectures:
       - arm64
       MemorySize: 128
-      Role: !GetAtt ECRRepositoryComplianceWebhookExecutionRole.Arn
+      Role: !Ref ExecutionRole
       Timeout: 15
-      Environment:
-        Variables:
-          REGISTRY_REGION: !If [HasRegistryRegion, !Ref RegistryRegion, !Ref "AWS::NoValue"]
-          REGISTRY_ID: !Ref RegistryId
       Events:
         ValidationEvent:
           Type: Api
